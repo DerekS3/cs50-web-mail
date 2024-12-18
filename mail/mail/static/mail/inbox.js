@@ -46,37 +46,102 @@ function open_email(email) {
   document.querySelector('#email-element').style.display = 'block';
   document.querySelector('#compose-view').style.display = 'none';
 
-  email.read = true;
+  set_read_status(email.id, true);
 
   // Use email subject as page title
   document.querySelector('#email-element').innerHTML = `
     <h3>${email.subject}</h3>
-    <p> from: ${email.sender} ${email.timestamp} </p>
-    <p> to: ${email.recipients.join(', ')} </p>
-    <p> ${email.body}</p>
+    <div class="email-info">
+      <strong>From: </strong>${email.sender} - ${email.timestamp}
+      <br><strong>To: </strong>${email.recipients.join(', ')}
+    </div>
+    <pre> ${email.body}</pre>
+    <hr>
+    <button class="btn btn-sm btn-outline-primary" id="reply">Reply</button>
+    <button class="btn btn-sm btn-outline-primary" id="archive">
+      ${email.archived ? 'Unarchive' : 'Archive'}
+    </button>
+    <button class="btn btn-sm btn-outline-primary" id="read-status">Mark as unread</button>
   `;
 
+  document.querySelector('#reply').addEventListener('click', () => {
+    reply_to_email(email)
+  })
 
+  document.querySelector('#archive').addEventListener('click', () => {
+    set_archived_status(email.id, email.archived)
+  })
 
-  console.log('This email has been opened')
+  document.querySelector('#read-status').addEventListener('click', function () {
+    set_read_status(email.id, !email.read);
+    this.innerHTML = 'Marked as unread';
+    this.disabled = true;    
+  })
+}
+
+function reply_to_email(email) {
+
+  // Show reply view and hide other views
+  document.querySelector('#emails-view').style.display = 'none';
+  document.querySelector('#email-element').style.display = 'none';
+  document.querySelector('#compose-view').style.display = 'block';
+
+  // Populate composition fields
+  document.querySelector('#compose-recipients').value = `${email.sender}`;
+  document.querySelector('#compose-subject').value = `Re: ${email.subject}`;
+  document.querySelector('#compose-body').value = `
+    \n\n
+    -----
+    On ${email.timestamp}, ${email.sender} wrote:\n
+    ${email.body}
+  `;
+
+  // Event listener for sending mail
+  document.querySelector('#compose-form').onsubmit = send_email;
+}
+
+function set_read_status(email_id, status) {
+
+  // Update read status on the server
+  fetch(`/emails/${email_id}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      read: status
+    })
+  })
+}
+
+function set_archived_status(email_id, status) {
+
+  // Update archived status on the server
+  fetch(`/emails/${email_id}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      archived: !status
+    })
+  })
+  .then(() => {
+    load_mailbox('inbox');
+  })
+  .catch(error => {
+    console.error('Error archiving email:', error);
+  });
 }
 
 function fetch_emails(mailbox) {
 
+  // Retrieve emails from server
   fetch(`/emails/${mailbox}`)
   .then(response => response.json())
   .then(emails => {
     // Print emails
     console.log(emails);
 
-    // ... do something else with emails ...
     emails.forEach(email => {
       preview_email(email, mailbox)
     });
   });
 }
-
-
 
 function preview_email(email, mailbox) {
 
@@ -96,7 +161,6 @@ function preview_email(email, mailbox) {
   emailElement.innerHTML = `
     <p><small> ${displayContact} - ${email.timestamp} </small></p>
     <p><strong> ${email.subject} </strong></p>
-    <p><small> </small></p>
   `;
 
   // Open email on click
@@ -106,7 +170,6 @@ function preview_email(email, mailbox) {
 
   // Add post to DOM
   document.querySelector('#emails-view').append(emailElement)
-
 }
 
 function send_email(event) {
